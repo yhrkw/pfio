@@ -2,6 +2,7 @@ import hashlib
 import io
 import os
 import urllib.parse
+from base64 import b64encode
 from types import TracebackType
 from typing import Optional, Type
 
@@ -192,10 +193,9 @@ class _ObjectWriter:
         assert self.mpu_id is not None
 
         data = self.buf.getvalue()
-        if 'b' in self.mode:
-            md5 = hashlib.md5(data).hexdigest()
-        else:
-            md5 = hashlib.md5(data.encode()).hexdigest()
+        if 'b' not in self.mode:
+            data = data.encode()
+        md5 = b64encode(hashlib.md5(data).digest()).decode("ascii")
         num = len(self.parts) + 1
 
         res = c.upload_part(Body=data, Bucket=b, Key=k,
@@ -226,9 +226,15 @@ class _ObjectWriter:
         # See:  https://boto3.amazonaws.com/v1/documentation/
         # api/latest/reference/services/s3.html#S3.Client.put_object
         if len(self.parts) == 0:
-            self.client.put_object(Body=self.buf.getvalue(),
+            data = self.buf.getvalue()
+            if 'b' not in self.mode:
+                data = data.encode()
+            md5 = b64encode(hashlib.md5(data).digest()).decode("ascii")
+            self.client.put_object(Body=data,
                                    Bucket=self.bucket,
-                                   Key=self.key)
+                                   Key=self.key,
+                                   ContentLength=len(data),
+                                   ContentMD5=md5)
         else:
             self._flush()
             # DO: MPU
